@@ -12,10 +12,12 @@ import redis
 import os
 
 # Redis client for temporary scrape batch storage
-_redis = redis.Redis.from_url(
-    os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-    decode_responses=True
-)
+_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+_redis_kwargs = {"decode_responses": True}
+if _redis_url.startswith("rediss://"):
+    _redis_kwargs["ssl_cert_reqs"] = "none"
+
+_redis = redis.Redis.from_url(_redis_url, **_redis_kwargs)
 SCRAPE_BATCH_TTL = 60 * 60 * 2  # 2 hours — enough time to download after a scrape
 
 

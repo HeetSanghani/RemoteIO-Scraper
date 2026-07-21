@@ -14,6 +14,8 @@ celery_app = Celery(
     include=["app.scheduler.celery_tasks"]
 )
 
+import ssl
+
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -21,6 +23,12 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
+
+if REDIS_URL.startswith("rediss://"):
+    celery_app.conf.update(
+        broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+        redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+    )
 
 celery_app.conf.beat_schedule = {
     "scrape-every-hour": {
