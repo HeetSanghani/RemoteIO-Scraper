@@ -1,0 +1,113 @@
+services:
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: remoteio_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-remoteio_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - remoteio_network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: remoteio_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - remoteio_network
+
+  # FastAPI App
+  api:
+    build: .
+    container_name: remoteio_api
+    restart: unless-stopped
+    # No --reload in production: it watches filesystem and randomly restarts the server
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    env_file: .env
+    volumes:
+      - .:/app
+      - ./exports:/app/exports
+    ports:
+      - "8000:8000"
+    environment:
+      # Override DB/Redis URLs with docker internal DNS (overrides .env values)
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres123}@postgres:5432/${DB_NAME:-remoteio_db}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - remoteio_network
+
+  # Celery Worker
+  celery_worker:
+    build: .
+    container_name: remoteio_celery_worker
+    restart: unless-stopped
+    command: celery -A app.scheduler.celery_worker.celery_app worker --loglevel=info --concurrency=2
+    env_file: .env
+    volumes:
+      - .:/app
+      - ./exports:/app/exports
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres123}@postgres:5432/${DB_NAME:-remoteio_db}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - remoteio_network
+
+  # Celery Beat (Scheduler)
+  celery_beat:
+    build: .
+    container_name: remoteio_celery_beat
+    restart: unless-stopped
+    # Persistent schedule file stored in a named volume so it survives restarts
+    command: celery -A app.scheduler.scheduler.celery_app beat --loglevel=info --schedule=/app/celerybeat-data/celerybeat-schedule
+    env_file: .env
+    volumes:
+      - .:/app
+      - celerybeat_data:/app/celerybeat-data
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres123}@postgres:5432/${DB_NAME:-remoteio_db}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - remoteio_network
+
+volumes:
+  postgres_data:
+  celerybeat_data:
+
+networks:
+  remoteio_network:
+    driver: bridge

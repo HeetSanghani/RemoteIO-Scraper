@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  render.yaml — Render Blueprint for Remote.io Job Scraper
+#
+#  How to use:
+#  1. Push this repo to GitHub
+#  2. Go to https://dashboard.render.com/blueprints
+#  3. Click "New Blueprint" and connect your repo
+#  4. Render will auto-create all services below
+#  5. Set the secret environment variables in the Render dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── FastAPI Web Server (Frontend + Backend) ───────────────────────────────
+  - type: web
+    name: remoteio-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: main
+    plan: free                  # Change to "starter" for no sleep / paid tier
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false             # You paste the value in Render dashboard
+      - key: REDIS_URL
+        sync: false             # Paste Upstash Redis URL here
+      - key: API_KEY
+        generateValue: true     # Render auto-generates a secure random key
+      - key: CORS_ORIGINS
+        sync: false             # Set to your Render URL after first deploy
+      - key: APOLLO_API_KEY
+        sync: false
+      - key: PROXY_URL
+        value: ""               # Optional — leave blank if no proxy
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: REMOTEIO_API_BASE
+        value: https://remote.io/api/v2/jobs
+      - key: JOBS_PER_PAGE
+        value: "30"
+      - key: REQUEST_TIMEOUT
+        value: "30"
+      - key: MAX_RETRIES
+        value: "3"
+      - key: CSV_EXPORT_PATH
+        value: exports/jobs_export.csv
+      - key: SCRAPE_INTERVAL_HOURS
+        value: "1"
+
+  # ── Celery Worker (Background Scraping) ──────────────────────────────────
+  # NOTE: Background workers require a PAID plan on Render ($7/month)
+  # Comment this block out if you are on the free plan.
+  # - type: worker
+  #   name: remoteio-celery-worker
+  #   runtime: docker
+  #   dockerfilePath: ./Dockerfile
+  #   dockerCommand: celery -A app.scheduler.celery_worker.celery_app worker --loglevel=info --concurrency=2
+  #   branch: main
+  #   plan: starter
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: REDIS_URL
+  #       sync: false
+  #     - key: API_KEY
+  #       sync: false
+  #     - key: APP_ENV
+  #       value: production
+  #     - key: LOG_LEVEL
+  #       value: INFO
+
+  # ── Celery Beat Scheduler (Hourly Auto-Scrape) ────────────────────────────
+  # NOTE: Also requires a PAID plan on Render ($7/month)
+  # - type: worker
+  #   name: remoteio-celery-beat
+  #   runtime: docker
+  #   dockerfilePath: ./Dockerfile
+  #   dockerCommand: celery -A app.scheduler.scheduler.celery_app beat --loglevel=info
+  #   branch: main
+  #   plan: starter
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: REDIS_URL
+  #       sync: false
+  #     - key: API_KEY
+  #       sync: false
+  #     - key: APP_ENV
+  #       value: production
