@@ -14,6 +14,9 @@ COPY . .
 
 RUN mkdir -p exports app/logs
 
-# Render provides $PORT at runtime — use shell form so the variable is expanded
+COPY start.sh .
+RUN chmod +x start.sh
+
+# Render provides $PORT at runtime
 EXPOSE 8000
-CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"
+CMD ["./start.sh"]
