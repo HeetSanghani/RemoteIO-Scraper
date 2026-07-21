@@ -82,10 +82,12 @@ def scrape_and_save_jobs(self, filters: dict = None, max_jobs: int = None, scrap
         # Both expire after 2 hours
         task_id = self.request.id
         try:
+            # Only store the remote_ids to avoid Upstash's 1MB maximum value size limit
+            all_remote_ids = [j.get("remote_id") for j in parsed_jobs if j.get("remote_id")]
             _redis.setex(
                 f"scrape:all:{task_id}",
                 SCRAPE_BATCH_TTL,
-                json.dumps(parsed_jobs, default=str),
+                json.dumps(all_remote_ids),
             )
             _redis.setex(
                 f"scrape:new:{task_id}",

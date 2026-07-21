@@ -297,6 +297,7 @@ def export_all_scraped(
     request: Request,
     task_id: str,
     fmt: str = Query(default="csv", enum=["csv", "excel"]),
+    db: Session = Depends(get_db),
     api_key: Optional[str] = Depends(verify_api_key),
 ):
     """
@@ -309,7 +310,23 @@ def export_all_scraped(
             status_code=404,
             detail="Scrape batch not found. It may have expired (2h TTL) or the task_id is wrong."
         )
-    jobs: list[dict] = json.loads(raw)
+    all_ids: list[str] = json.loads(raw)
+    if not all_ids:
+        jobs = []
+    else:
+        from app.database.models.job import Job
+        db_jobs = db.query(Job).filter(Job.remote_id.in_(all_ids)).all()
+        jobs = [
+            {
+                "remote_id": j.remote_id, "title": j.title,
+                "company_name": j.company_name, "company_country": j.company_country,
+                "category": j.category, "salary": j.salary,
+                "job_link": j.job_link, "application_url": j.application_url,
+                "key_preferences": j.key_preferences,
+                "published_at": str(j.published_at) if j.published_at else "",
+            }
+            for j in db_jobs
+        ]
 
     date_str = datetime.now().strftime("%Y-%m-%d")
     if fmt == "excel":
